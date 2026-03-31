@@ -63,7 +63,7 @@ const currencies: Currency[] = [
 const Pricing4 = ({ title, description, plans }: Pricing4Props) => {
   const [isAnnually, setIsAnnually] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>(
-    currencies[0]
+    currencies[0],
   ); // Default to INR
   const convertPrice = (priceInINR: number): string => {
     if (priceInINR === 0) return "Custom";
@@ -87,7 +87,7 @@ const Pricing4 = ({ title, description, plans }: Pricing4Props) => {
 
   return (
     <section className="py-24">
-      <div className="container">
+      <div className="container mx-auto">
         <div className="mx-auto flex max-w-7xl flex-col gap-8">
           <div className="text-center space-y-4">
             <h2 className="text-4xl font-medium tracking-tight lg:text-5xl">
@@ -208,7 +208,7 @@ const Pricing4 = ({ title, description, plans }: Pricing4Props) => {
                       <span className="text-4xl font-medium">
                         {selectedCurrency.symbol}
                         {convertPrice(
-                          isAnnually ? plan.price.yearly : plan.price.monthly
+                          isAnnually ? plan.price.yearly : plan.price.monthly,
                         )}
                       </span>
                       <p className="text-muted-foreground">
