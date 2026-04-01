@@ -39,7 +39,7 @@ VECTOR_PREFIX = "semvec:"           # namespace for embeddings
 # LLM (Gemini) Setup
 # ─────────────────────────────────────────
 genai.configure(api_key=GEMINI_API_KEY)
-LLM_MODEL = genai.GenerativeModel("gemini-2.0-flash-lite")
+LLM_MODEL = genai.GenerativeModel("gemini-2.5-flash")
 EMBED_MODEL = "gemini-embedding-001"  # or "gemini-embedding-exp-03-07"
 # ─────────────────────────────────────────
 

@@ -25,7 +25,7 @@ const generateReadme = async (owner, repo, ref, fileContents) => {
     console.log(repoText.length);
 
     const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
+        model: "gemini-2.5-flash",
         contents: `Create a comprehensive, professional README.md file for the following project:
 
 Project files and content are provided below. Analyze the codebase to understand:
@@ -79,7 +79,7 @@ const generateDiagram = async (owner, repo, ref, fileContents) => {
         .join("");
 
     const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
+        model: "gemini-2.5-flash",
         contents: `Generate a comprehensive Mermaid TD (top-down) graph diagram representing the architecture of the following codebase. 
         
 The diagram should:
@@ -136,7 +136,7 @@ const generatePullRequestReview = async (
         .join("");
 
     const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
+        model: "gemini-2.5-flash",
         contents: `Please provide a detailed code review for this pull request. Analyze both the changes and the overall codebase context.
 
 **Pull Request Diff:**

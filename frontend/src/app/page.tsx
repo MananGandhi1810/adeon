@@ -1,4 +1,5 @@
 "use client";
+
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
 import { useRef } from "react";
 import Navbar from "@/components/navbar";
