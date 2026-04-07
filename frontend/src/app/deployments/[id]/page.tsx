@@ -51,6 +51,7 @@ interface Deployment {
   envSecrets?: EnvSecret[];
   containerId?: string;
   containerPort?: number;
+  appUrl?: string | null;
 }
 
 interface User {
@@ -95,6 +96,13 @@ export default function DeploymentDetailPage() {
   const params = useParams();
   const router = useRouter();
 
+  const getFallbackAppUrl = (port?: number) => {
+    if (!port || typeof window === "undefined") {
+      return null;
+    }
+    return `${window.location.protocol}//${window.location.hostname}:${port}`;
+  };
+
   useEffect(() => {
     const init = async () => {
       await fetchUser();
@@ -110,7 +118,7 @@ export default function DeploymentDetailPage() {
         `${process.env.NEXT_PUBLIC_SERVER_URL}/auth/user`,
         {
           headers: { authorization: `Bearer ${accessToken}` },
-        }
+        },
       );
       setUser(data.data.user);
     } catch (error) {
@@ -132,7 +140,7 @@ export default function DeploymentDetailPage() {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           },
-        }
+        },
       );
       setDeployment(response.data.data.deployment);
     } catch (error) {
@@ -153,10 +161,10 @@ export default function DeploymentDetailPage() {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           },
-        }
+        },
       );
       setDeployment((prev) =>
-        prev ? { ...prev, status: response.data.data.status } : null
+        prev ? { ...prev, status: response.data.data.status } : null,
       );
     } catch (error) {
       toast.error("Failed to refresh status");
@@ -176,7 +184,7 @@ export default function DeploymentDetailPage() {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           },
-        }
+        },
       );
       toast.success("Deployment started successfully");
       refreshStatus();
@@ -196,7 +204,7 @@ export default function DeploymentDetailPage() {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           },
-        }
+        },
       );
       toast.success("Deployment stopped successfully");
       refreshStatus();
@@ -222,7 +230,7 @@ export default function DeploymentDetailPage() {
       <div
         className={cn(
           "mx-auto flex w-full max-w-[1920px] flex-col overflow-hidden rounded-md bg-muted md:flex-row",
-          "h-screen"
+          "h-screen",
         )}
       >
         <div className="flex flex-1 flex-col overflow-hidden bg-card border border-border rounded-2xl h-full w-full max-h-[97vh] max-w-[97vw] m-auto ml-4">
@@ -237,7 +245,7 @@ export default function DeploymentDetailPage() {
       <div
         className={cn(
           "mx-auto flex w-full max-w-[1920px] flex-col overflow-hidden rounded-md bg-black md:flex-row",
-          "h-screen"
+          "h-screen",
         )}
       >
         <div className="flex flex-1 flex-col overflow-hidden bg-card border border-border rounded-2xl h-full w-full max-h-[97vh] max-w-[97vw] m-auto m">
@@ -256,11 +264,14 @@ export default function DeploymentDetailPage() {
     );
   }
 
+  const appUrl =
+    deployment.appUrl || getFallbackAppUrl(deployment.containerPort);
+
   return (
     <div
       className={cn(
         "mx-auto flex w-full max-w-[1920px] flex-col overflow-hidden rounded-md bg-black md:flex-row",
-        "h-screen"
+        "h-screen",
       )}
     >
       <div className="flex flex-1 flex-col overflow-hidden bg-card border border-border rounded-2xl h-full w-full max-h-[97vh] max-w-[97vw] m-auto m">
@@ -339,8 +350,9 @@ export default function DeploymentDetailPage() {
                         className="h-8 w-8 p-0"
                       >
                         <RefreshCw
-                          className={`h-4 w-4 ${statusLoading ? "animate-spin" : ""
-                            }`}
+                          className={`h-4 w-4 ${
+                            statusLoading ? "animate-spin" : ""
+                          }`}
                         />
                       </Button>
                     </div>
@@ -396,6 +408,25 @@ export default function DeploymentDetailPage() {
                           {deployment.containerPort}
                         </span>
                       </div>
+
+                      {appUrl && (
+                        <>
+                          <Separator />
+                          <div className="flex items-center justify-between py-2">
+                            <span className="text-sm font-medium text-muted-foreground">
+                              App URL
+                            </span>
+                            <a
+                              href={appUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-medium text-primary hover:underline"
+                            >
+                              Open
+                            </a>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -442,6 +473,19 @@ export default function DeploymentDetailPage() {
                       View on GitHub
                     </a>
                   </Button>
+
+                  {appUrl && (
+                    <Button variant="outline" className="w-full h-11" asChild>
+                      <a
+                        href={appUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open Deployment
+                      </a>
+                    </Button>
+                  )}
                 </div>
               </div>
             </MagicCard>

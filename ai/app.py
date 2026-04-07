@@ -39,7 +39,7 @@ VECTOR_PREFIX = "semvec:"           # namespace for embeddings
 # LLM (Gemini) Setup
 # ─────────────────────────────────────────
 genai.configure(api_key=GEMINI_API_KEY)
-LLM_MODEL = genai.GenerativeModel("gemini-2.5-flash")
+LLM_MODEL = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 EMBED_MODEL = "gemini-embedding-001"  # or "gemini-embedding-exp-03-07"
 # ─────────────────────────────────────────
 
@@ -94,21 +94,49 @@ def _as_str(val) -> str:
     return val.decode() if isinstance(val, (bytes, bytearray)) else val
 
 
+def _extract_json_array(text: str):
+    """
+    Try to parse and return the first valid JSON array found in `text`.
+    Returns [] when no valid array can be parsed.
+    """
+    if not text:
+        return []
+
+    cleaned = text.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    # Fast path: entire payload is a JSON array.
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: find the first decodable array inside mixed text.
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(cleaned):
+        if ch != "[":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(cleaned[idx:])
+            if isinstance(candidate, list):
+                return candidate
+        except json.JSONDecodeError:
+            continue
+    return []
+
+
 # ─────────────────────────────────────────
 # Gemini call helper
 # ─────────────────────────────────────────
 def call_gemini(prompt: str, expect_json: bool = False):
     try:
         resp = LLM_MODEL.generate_content(prompt)
-        text = resp.text.strip()
+        text = (resp.text or "").strip()
         if expect_json:
-            match = re.search(r"(\[.*?\])", text, re.DOTALL)
-            if match:
-                return json.loads(match.group(1))
-            try:
-                return json.loads(text)
-            except:
-                return []
+            return _extract_json_array(text)
         return text
     except Exception as e:
         print(f"LLM error: {e}")
@@ -667,8 +695,18 @@ def endpoint_bug_detect():
         cache_key = get_cache_key(owner, repo, commit_sha, "bug_detect", single_file)
         cached = redis_client.get(cache_key)
         if cached is not None:
-            redis_client.expire(cache_key, CACHE_TTL)
-            return jsonify(json.loads(cached))
+            cached_payload = json.loads(cached)
+
+            # If old cache is all-empty, recompute instead of pinning bad data for 24h.
+            has_any_bug = any(
+                isinstance(file_data, dict) and file_data.get("bug_report")
+                for file_data in cached_payload.values()
+            )
+            if has_any_bug:
+                redis_client.expire(cache_key, CACHE_TTL)
+                return jsonify(cached_payload)
+
+            redis_client.delete(cache_key)
 
         # Step 1: Run raw bug detection via Gemini
         raw_result = detect_bugs(owner, repo, token, single_file)
