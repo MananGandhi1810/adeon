@@ -65,7 +65,7 @@ export default function CodeStructurePage() {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -81,8 +81,6 @@ export default function CodeStructurePage() {
           .replace(/^```mermaid\s*/i, "") // Remove starting ```mermaid
           .replace(/```$/, "") // Remove ending ```
           .replace(/\\n/g, "\n") // Replace escaped newlines
-          .replace(/[()/]/g, "") // Remove special characters
-          .replace(/end[\s\S]*$/, "end") // This is the corrected line
           .trim(); // Remove extra whitespace
 
         setMermaidChart(cleanedData);
@@ -108,7 +106,9 @@ export default function CodeStructurePage() {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbLink href={`/dashboard/${params.id}`}>Dashboard</BreadcrumbLink>
+                  <BreadcrumbLink href={`/dashboard/${params.id}`}>
+                    Dashboard
+                  </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>

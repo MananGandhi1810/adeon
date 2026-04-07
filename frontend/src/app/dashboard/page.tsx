@@ -130,7 +130,7 @@ function ImportRepositoryDialog({
                 url: repo.url.replace(/\.git$/, ""),
                 title: repo.name,
                 description: "",
-              })
+              }),
             );
             setRepositories(repos);
           } else {
@@ -231,13 +231,13 @@ function ImportRepositoryDialog({
                                 setRepoDescription("");
                               } else {
                                 const selectedRepo = repositories.find(
-                                  (r) => r.url === currentValue
+                                  (r) => r.url === currentValue,
                                 );
                                 if (selectedRepo) {
                                   setRepoUrl(selectedRepo.url);
                                   setRepoTitle(selectedRepo.title);
                                   setRepoDescription(
-                                    selectedRepo.description || ""
+                                    selectedRepo.description || "",
                                   );
                                 }
                               }
@@ -249,7 +249,7 @@ function ImportRepositoryDialog({
                                 "mr-2 h-4 w-4",
                                 repoUrl === repo.url
                                   ? "opacity-100"
-                                  : "opacity-0"
+                                  : "opacity-0",
                               )}
                             />
                             {repo.title}
@@ -365,7 +365,7 @@ function ProjectCard({ project }: { project: Project }) {
           <p className="text-muted-foreground line-clamp-2">
             {project.description ||
               `Repository: ${getRepoOwner(project.repoUrl)}/${getRepoName(
-                project.repoUrl
+                project.repoUrl,
               )}`}
           </p>
         </div>
@@ -441,7 +441,7 @@ function EmptyState({
         <MagicCard className="inline-block">
           <Button
             onClick={onImportClick}
-            className="gap-2 bg-transparent hover:bg-transparent"
+            className="gap-2 bg-transparent hover:bg-transparent text-white"
           >
             <Plus className="h-4 w-4" />
             Import Repository
@@ -478,7 +478,7 @@ export default function Dashboard() {
         `${process.env.NEXT_PUBLIC_SERVER_URL}/auth/user`,
         {
           headers: { authorization: `Bearer ${accessToken}` },
-        }
+        },
       );
       setUser(data.data.user);
     } catch (error) {
@@ -494,7 +494,7 @@ export default function Dashboard() {
         `${process.env.NEXT_PUBLIC_SERVER_URL}/project/list`,
         {
           headers: { authorization: `Bearer ${accessToken}` },
-        }
+        },
       );
       setProjects(response.data.data.projectData);
       console.log("Fetched projects:", response.data.data.projectData);
@@ -515,14 +515,15 @@ export default function Dashboard() {
     try {
       const accessToken = localStorage.getItem("accessToken");
       const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_SERVER_URL
+        `${
+          process.env.NEXT_PUBLIC_SERVER_URL
         }/project/create?repo=${encodeURIComponent(
-          data.url
+          data.url,
         )}&title=${encodeURIComponent(
-          data.title
+          data.title,
         )}&description=${encodeURIComponent(data.description)}`,
         {},
-        { headers: { authorization: `Bearer ${accessToken}` } }
+        { headers: { authorization: `Bearer ${accessToken}` } },
       );
 
       toast.success("Repository imported successfully!");
@@ -547,7 +548,7 @@ export default function Dashboard() {
     (project) =>
       project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.repoUrl.toLowerCase().includes(searchQuery.toLowerCase())
+      project.repoUrl.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   if (isLoading) {
@@ -555,7 +556,7 @@ export default function Dashboard() {
       <div
         className={cn(
           "mx-auto flex w-full max-w-[1920px] flex-col overflow-hidden rounded-md bg-muted md:flex-row",
-          "h-screen"
+          "h-screen",
         )}
       >
         <div className="flex flex-1 flex-col overflow-hidden bg-card border border-border rounded-2xl h-full w-full max-h-[97vh] max-w-[97vw] m-auto ml-4">
@@ -569,7 +570,7 @@ export default function Dashboard() {
     <div
       className={cn(
         "mx-auto flex w-full max-w-[1920px] flex-col overflow-hidden rounded-md  bg-black md:flex-row ",
-        "h-screen"
+        "h-screen",
       )}
     >
       <div className="flex flex-1 flex-col overflow-hidden bg-card border border-border rounded-2xl h-full w-full max-h-[97vh] max-w-[97vw] m-auto m">
