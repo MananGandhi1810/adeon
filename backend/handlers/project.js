@@ -5,6 +5,7 @@ import {
   processAllPullRequests,
   processSinglePullRequest,
   normalizeMermaidDiagram,
+  chatWithCode,
 } from "../utils/processing.js";
 import Docker from "dockerode";
 import { set, get } from "../utils/keyvalue-db.js";
@@ -462,41 +463,19 @@ const projectChatHandler = async (req, res) => {
     });
   }
   try {
-    const aiServiceBaseUrl =
-      process.env.AI_SERVICE_BASE_URL || "http://127.0.0.1:8888";
-    const payloadToAiService = {
-      owner: owner,
-      repo: repo,
-      token: req.user.ghAccessToken,
-      messages: messages,
-    };
+    const responseData = await chatWithCode(
+      owner,
+      repo,
+      "main",
+      messages,
+      project.user.ghAccessToken,
+    );
 
-    const aiResponse = await fetch(`${aiServiceBaseUrl}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payloadToAiService),
+    return res.json({
+      success: true,
+      message: "AI chat response received",
+      data: responseData,
     });
-
-    if (aiResponse.ok) {
-      const responseData = await aiResponse.json();
-      return res.json({
-        success: true,
-        message: "AI chat response received",
-        data: responseData,
-      });
-    } else {
-      const errorText = await aiResponse.text();
-      console.error(
-        `Error from AI service /chat for project ${projectId} (using payload owner/repo):`,
-        aiResponse.status,
-        errorText,
-      );
-      return res.status(aiResponse.status).json({
-        success: false,
-        message: `Error from AI service: ${errorText}`,
-        data: null,
-      });
-    }
   } catch (error) {
     console.error(
       `Error in projectChatHandler for project ${projectId}:`,

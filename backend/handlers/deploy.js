@@ -156,7 +156,7 @@ const getDeploymentByIdHandler = async (req, res) => {
       data: null,
     });
   }
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
       userId: req.user.id,
@@ -195,9 +195,10 @@ const startDeploymentHandler = async (req, res) => {
       data: null,
     });
   }
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
+      userId: req.user.id,
     },
     select: {
       containerId: true,
@@ -239,9 +240,10 @@ const stopDeploymentHandler = async (req, res) => {
       data: null,
     });
   }
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
+      userId: req.user.id,
     },
     select: {
       containerId: true,
@@ -283,9 +285,10 @@ const getDeploymentStatusHandler = async (req, res) => {
       data: null,
     });
   }
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
+      userId: req.user.id,
     },
     select: {
       containerId: true,
@@ -342,12 +345,14 @@ const getContainerPortHandler = async (req, res) => {
     });
   }
 
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
+      userId: req.user.id,
     },
     select: {
       containerId: true,
+      containerPort: true,
     },
   });
 
@@ -498,9 +503,10 @@ const incomingWebhookHandler = async (req, res) => {
 
 const proxyDeploymentHandler = async (req, res) => {
   const { deploymentId } = req.params;
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
+      userId: req.user.id,
     },
     select: {
       containerPort: true,
@@ -551,9 +557,10 @@ const getContainerLogsHandler = async (req, res) => {
     });
   }
 
-  const deployment = await prisma.deployment.findUnique({
+  const deployment = await prisma.deployment.findFirst({
     where: {
       id: deploymentId,
+      userId: req.user.id,
     },
     select: {
       containerId: true,

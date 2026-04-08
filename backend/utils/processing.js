@@ -40,6 +40,91 @@ const normalizeMermaidDiagram = (rawDiagram) => {
   return `graph TD\n${diagram}`;
 };
 
+const fetchStackOverflowForIssue = async (issueText, maxHits = 3) => {
+  try {
+    const searchUrl = "https://api.stackexchange.com/2.3/search/advanced";
+    const params = {
+      order: "desc",
+      sort: "relevance",
+      accepted: "True",
+      title: issueText,
+      site: "stackoverflow",
+      pagesize: maxHits,
+    };
+    const resp = await axios.get(searchUrl, { params });
+    const questions = resp.data.items || [];
+    const hits = [];
+
+    for (const q of questions) {
+      const qid = q.question_id;
+      const title = q.title;
+      const link = q.link;
+
+      // Fetch top answer for this question
+      const ansUrl = `https://api.stackexchange.com/2.3/questions/${qid}/answers`;
+      const ansParams = {
+        order: "desc",
+        sort: "votes",
+        site: "stackoverflow",
+        filter: "withbody",
+        pagesize: 1,
+      };
+      
+      try {
+        const ansResp = await axios.get(ansUrl, { params: ansParams });
+        const answers = ansResp.data.items || [];
+        let accepted = null;
+        if (answers.length > 0) {
+          accepted = {
+            answer_id: answers[0].answer_id,
+            body: answers[0].body,
+            is_accepted: answers[0].is_accepted || false,
+          };
+        }
+        hits.push({
+          question_id: qid,
+          title: title,
+          link: link,
+          accepted_answer: accepted,
+        });
+      } catch (err) {
+        console.error(`[StackOverflow Answer Error] ${err.message}`);
+        hits.push({
+          question_id: qid,
+          title: title,
+          link: link,
+          accepted_answer: null,
+        });
+      }
+    }
+    return hits;
+  } catch (error) {
+    console.error(`[StackOverflow API error] ${error.message}`);
+    return [];
+  }
+};
+
+const extractJsonArray = (text) => {
+  if (!text) return [];
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {}
+
+  // Fallback: finding first [ and last ]
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+  if (start !== -1 && end !== -1 && end > start) {
+    try {
+      const candidate = JSON.parse(cleaned.substring(start, end + 1));
+      if (Array.isArray(candidate)) return candidate;
+    } catch (e) {}
+  }
+  return [];
+};
+
 const generateReadme = async (owner, repo, ref, fileContents) => {
   const redisKey = `readme:${owner}:${repo}:${ref}`;
   const expiry = 24 * 60 * 60;
@@ -206,6 +291,213 @@ Format your response in markdown with clear sections.`,
   }
 
   return reviewContent;
+};
+
+const generateBugDetect = async (owner, repo, ref, fileContents) => {
+  const bugCacheKey = `bug_detect:${owner}:${repo}:${ref}`;
+  const expiry = 24 * 60 * 60;
+
+  if (await exists(bugCacheKey)) {
+    console.log(`[CACHE] Getting bug detection for ${owner}/${repo}/${ref}`);
+    return JSON.parse(await get(bugCacheKey));
+  }
+
+  const results = {};
+  // Limit to core files to avoid hitting token limits or being too slow
+  const coreFiles = fileContents.filter(f => 
+    /\.(js|jsx|ts|tsx|py|java|cpp|c|cs|rb|go|php)$/i.test(f.name) && 
+    !f.name.includes("node_modules") && 
+    !f.name.includes(".git")
+  ).slice(0, 15); // Increased to 15 files
+
+  for (const file of coreFiles) {
+    const language = file.name.split(".").pop();
+    const prompt = `
+You are a senior security engineer.
+Review the following ${language} code for:
+- Logic bugs
+- Security vulnerabilities (injection, XSS, CSRF, unsafe deserialization, etc.)
+- Bad practices or anti-patterns
+
+For each issue, output:
+- Line number(s)
+- Short description
+- Severity (High/Medium/Low)
+- A concise suggested fix
+
+Output ONLY as a JSON array:
+[
+  {"line": 12, "issue": "Possible SQL Injection", "severity": "High", "fix": "Use parameterized queries"},
+  ...
+]
+
+Code:
+${file.content}
+`;
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-lite-preview",
+        contents: prompt,
+        config: { temperature: 0.1 }
+      });
+      const bugs = extractJsonArray(response.text);
+      
+      // Enrich with StackOverflow
+      const enrichedBugs = [];
+      for (const bug of bugs) {
+        const soHits = await fetchStackOverflowForIssue(bug.issue, 3);
+        bug.stackoverflow_hits = soHits;
+        enrichedBugs.push(bug);
+      }
+
+      results[file.name] = {
+        language: language,
+        bug_report: enrichedBugs
+      };
+    } catch (err) {
+      console.error(`Error detecting bugs in ${file.name}:`, err);
+    }
+  }
+
+  await set(bugCacheKey, JSON.stringify(results), expiry);
+  return results;
+};
+
+const generateMocks = async (owner, repo, ref, fileContents) => {
+  const mockCacheKey = `mocks:${owner}:${repo}:${ref}`;
+  const expiry = 24 * 60 * 60;
+
+  if (await exists(mockCacheKey)) {
+    return JSON.parse(await get(mockCacheKey));
+  }
+
+  const results = {};
+  const coreFiles = fileContents.filter(f => 
+    /\.(js|jsx|ts|tsx|py|java|cpp|c|cs|rb|go|php)$/i.test(f.name) && 
+    !f.name.includes("node_modules") && 
+    !f.name.includes(".git")
+  ).slice(0, 10);
+
+  for (const file of coreFiles) {
+    const language = file.name.split(".").pop();
+    const prompt = `
+Given the following ${language} code (functions/classes/modules), generate:
+- Realistic test input data for each function/class (both valid and invalid edge cases)
+- Example mocks for any APIs, DB calls, or external services used (use common mocking tools for the language)
+Output ONLY the code, one test function per example (named test_*), ready to copy-paste. No explanations. No markdown fences.
+
+Code:
+${file.content}
+`;
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-lite-preview",
+        contents: prompt,
+        config: { temperature: 0.2 }
+      });
+      results[file.name] = {
+        language: language,
+        mock_data: response.text.replace(/^```[\w]*\n/, "").replace(/```$/, "").trim()
+      };
+    } catch (err) {
+      console.error(`Error generating mocks for ${file.name}:`, err);
+    }
+  }
+
+  await set(mockCacheKey, JSON.stringify(results), expiry);
+  return results;
+};
+
+const generateTests = async (owner, repo, ref, fileContents) => {
+  const testCacheKey = `tests:${owner}:${repo}:${ref}`;
+  const expiry = 24 * 60 * 60;
+
+  if (await exists(testCacheKey)) {
+    return JSON.parse(await get(testCacheKey));
+  }
+
+  const results = {};
+  const coreFiles = fileContents.filter(f => 
+    /\.(js|jsx|ts|tsx|py|java|cpp|c|cs|rb|go|php)$/i.test(f.name) && 
+    !f.name.includes("node_modules") && 
+    !f.name.includes(".git")
+  ).slice(0, 10);
+
+  for (const file of coreFiles) {
+    const language = file.name.split(".").pop();
+    const prompt = `
+Given the following ${language} code, generate comprehensive unit/integration test code using the standard test framework for that language.
+Return ONLY the test code as plain text, WITHOUT explanations, comments, or markdown fences.
+Format output to be copy-paste ready with correct indentation and line breaks.
+
+Code:
+${file.content}
+`;
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-lite-preview",
+        contents: prompt,
+        config: { temperature: 0.2 }
+      });
+      results[file.name] = {
+        language: language,
+        test_cases: response.text.replace(/^```[\w]*\n/, "").replace(/```$/, "").trim()
+      };
+    } catch (err) {
+      console.error(`Error generating tests for ${file.name}:`, err);
+    }
+  }
+
+  await set(testCacheKey, JSON.stringify(results), expiry);
+  return results;
+};
+
+const chatWithCode = async (owner, repo, ref, messages, githubToken) => {
+  const allFileContents = await getRepoContents(owner, repo, ref, githubToken);
+  
+  if (!allFileContents) {
+    throw new Error("Could not fetch repository contents for chat context");
+  }
+
+  // Concatenate codebase context (limit to avoid token overflow)
+  const coreFiles = allFileContents.filter(f => 
+    /\.(js|jsx|ts|tsx|py|java|cpp|c|cs|rb|go|php|md|txt|json)$/i.test(f.name) && 
+    !f.name.includes("node_modules") && 
+    !f.name.includes(".git") &&
+    !f.name.includes("pnpm-lock.yaml") &&
+    !f.name.includes("package-lock.json")
+  ).slice(0, 50); // Take more files for chat context
+
+  const codeBlob = coreFiles
+    .map((file) => `File: ${file.name}\nContent:\n${file.content}\n\n`)
+    .join("")
+    .slice(0, 100000); // Limit to ~100k chars
+
+  const systemPrompt = `You are a helpful AI assistant specialized in analyzing code. 
+Below is the codebase for the repository ${owner}/${repo}. Use it to answer the user’s questions accurately. 
+If you need to reference a file or snippet, quote the relevant lines.
+
+Codebase Context:
+${codeBlob}
+`;
+
+  const chatPrompt = messages.map(msg => {
+    const role = msg.role === "system" ? "[System]" : msg.role === "user" ? "[User]" : "[Assistant]";
+    return `${role}: ${msg.content}`;
+  }).join("\n");
+
+  const finalPrompt = `[System]: ${systemPrompt}\n${chatPrompt}\n[Assistant]:`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: finalPrompt,
+    config: { 
+      temperature: 0.7,
+      maxOutputTokens: 2048
+    }
+  });
+
+  return { reply: response.text };
 };
 
 const extractContentsFromArchive = (archiveData) => {
@@ -422,31 +714,28 @@ const processPush = async (
     );
   }
   if (requirements.bugDetect) {
-    bugDetectPromise = axios
-      .post(`${process.env.AI_SERVICE_BASE_URL}/bug_detect`, aiPayload)
-      .then((res) => res.data)
-      .catch((r) => {
+    bugDetectPromise = generateBugDetect(owner, repo, ref, allFileContents).catch(
+      (r) => {
         console.log("Error detecting bugs:", r);
         return null;
-      });
+      },
+    );
   }
   if (requirements.mocks) {
-    generateMocksPromise = axios
-      .post(`${process.env.AI_SERVICE_BASE_URL}/generate_mocks`, aiPayload)
-      .then((res) => res.data)
-      .catch((r) => {
+    generateMocksPromise = generateMocks(owner, repo, ref, allFileContents).catch(
+      (r) => {
         console.log("Error generating mocks:", r);
         return null;
-      });
+      },
+    );
   }
   if (requirements.tests) {
-    generateTestsPromise = axios
-      .post(`${process.env.AI_SERVICE_BASE_URL}/generate_tests`, aiPayload)
-      .then((res) => res.data)
-      .catch((r) => {
+    generateTestsPromise = generateTests(owner, repo, ref, allFileContents).catch(
+      (r) => {
         console.log("Error generating tests:", r);
         return null;
-      });
+      },
+    );
   }
   const [readme, diagram, bugDetect, mocks, tests] = await Promise.all([
     requirements.readme ? readmePromise : Promise.resolve(undefined),
@@ -567,4 +856,8 @@ export {
   processAllPullRequests,
   generatePullRequestReview,
   processSinglePullRequest,
+  generateBugDetect,
+  generateMocks,
+  generateTests,
+  chatWithCode,
 };
